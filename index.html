@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+    <style>
+        #draw {
+            display: block;
+            width: 512px;
+            height: 512px;
+            user-select: none;
+            touch-action: none;
+        }
+
+        #msg {
+            font-family: monospace;
+        }
+    </style>
+    <body>
+        <canvas id=draw width=512 height=512></canvas>
+        <span id=msg></span>
+    </body>
+    <script>
+    window.addEventListener('load', () => {
+        const draw = document.querySelector('#draw');
+        const ctx = draw.getContext('2d');
+        const msg = document.querySelector('#msg');
+
+        const pen = {
+            down: false,
+            pos: {x:0, y:0},
+            tilt: {x:0, y:0},
+            pressure: 0
+        }
+
+        const lightCone = () => { 
+            const offcanvas = document.createElement('canvas');
+            const tx = offcanvas.getContext('2d');
+
+            offcanvas.width = ctx.canvas.width*4;
+            offcanvas.height = ctx.canvas.height;
+
+            tx.translate(-offcanvas.width, 0);
+
+            tx.shadowOffsetX = offcanvas.width;    
+            tx.shadowOffsetY = 0;
+
+            tx.shadowColor = '#000';
+
+            tx.shadowBlur = 30;
+
+            // The following is tested with the Pixelbook pen
+            const angle = -Math.atan2(pen.tilt.x, pen.tilt.y);
+            const ratio = 1 / Math.pow((1 + pen.tilt.x ** 2 + pen.tilt.y ** 2 ), 0.01);
+
+            tx.beginPath();
+            tx.ellipse(
+                pen.pos.x - 3 * pen.tilt.x,
+                pen.pos.y - 3 * pen.tilt.y,
+                100 * pen.pressure * ratio,
+                100 * pen.pressure / ratio, 
+                angle,
+                0, 2 * Math.PI);
+            tx.closePath();
+            tx.fill();
+
+            ctx.save();
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.drawImage(offcanvas, 0, 0);
+            ctx.restore();
+        }
+
+        const render = () => {
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, draw.width, draw.height);
+
+            if (!pen.down) {
+                return;
+            }
+
+            lightCone();
+        }
+
+        const updatePen = e => {
+            const rect = draw.getBoundingClientRect();
+            if (e.type === "pointerdown" || e.type === "pointermove") pen.down = true;
+            if (e.type === "pointerup") pen.down = false;
+
+            pen.pos.x = e.clientX - rect.left;
+            pen.pos.y = e.clientY - rect.top;
+
+            pen.tilt.x = e.tiltX;
+            pen.tilt.y = e.tiltY;
+
+            pen.pressure = e.pressure;
+
+            requestAnimationFrame(render);
+        }
+
+
+        const writeMsg = (text, evt) => {
+            msg.innerHTML = `${text} 
+                x,y = (${evt.clientX.toFixed(2)},${evt.clientY.toFixed(2)})
+                t = (${evt.tiltX.toFixed(2)}, ${evt.tiltY.toFixed(2)})
+                p = ${evt.pressure.toFixed(2)}
+            `;
+        }
+
+        const absorbEvent = e => {
+            e.preventDefault && e.preventDefault();
+            e.stopPropagation && e.stopPropagation();
+            e.cancelBubble = true;
+            e.returnValue = false;
+            return false;
+        };
+
+        draw.addEventListener('pointerdown', e => {
+            writeMsg(`${e.pointerType} down`, e);
+            return absorbEvent(e);
+        });
+
+        draw.addEventListener('pointermove', e => {
+            writeMsg(`${e.pointerType} move`, e);
+            updatePen(e);
+            return absorbEvent(e);
+        });
+
+        draw.addEventListener('pointerup', e => {
+            writeMsg(`${e.pointerType} up__`, e);
+            updatePen(e);
+            return absorbEvent(e);
+        });
+
+        requestAnimationFrame(render);
+        draw.style.background = 'url(lars.jpeg)';
+    });
+    </script>
+</html>
